@@ -72,6 +72,11 @@ jobs:
         with:
           target: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
+      # setup-rust-toolchain exports RUSTFLAGS=-D warnings; upstream forks and
+      # dependencies carry warnings, and they must not fail the release build.
+      - name: Allow warnings in dependencies
+        run: echo "RUSTFLAGS=" >> "$GITHUB_ENV"
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: 'true'
@@ -116,7 +121,7 @@ jobs:
       - name: Build the universal APK (arm64-v8a + armeabi-v7a)
         run: |
           cd android
-          ./gradlew -q assembleRelease -Pmdm.abis=arm64-v8a,armeabi-v7a -Pmdm.portRevision=${{ inputs.portRevision }}
+          ./gradlew -q assembleRelease -Pmdm.abis=arm64-v8a,armeabi-v7a -Pmdm.portRevision=${{ inputs.portRevision || '1' }}
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
             "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-universal-arm32-arm64.apk"
@@ -124,21 +129,21 @@ jobs:
       - name: Build the arm64 APK (phones, tablets)
         run: |
           cd android
-          ./gradlew -q assembleRelease -Pmdm.abis=arm64-v8a -Pmdm.portRevision=${{ inputs.portRevision }}
+          ./gradlew -q assembleRelease -Pmdm.abis=arm64-v8a -Pmdm.portRevision=${{ inputs.portRevision || '1' }}
           cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
             "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-arm64.apk"
 
       - name: Build the 32-bit APK (armeabi-v7a)
         run: |
           cd android
-          ./gradlew -q assembleRelease -Pmdm.abis=armeabi-v7a -Pmdm.portRevision=${{ inputs.portRevision }}
+          ./gradlew -q assembleRelease -Pmdm.abis=armeabi-v7a -Pmdm.portRevision=${{ inputs.portRevision || '1' }}
           cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
             "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-arm32.apk"
 
       - name: Build the x86_64 APK (emulators)
         run: |
           cd android
-          ./gradlew -q assembleRelease -Pmdm.abis=x86_64 -Pmdm.portRevision=${{ inputs.portRevision }}
+          ./gradlew -q assembleRelease -Pmdm.abis=x86_64 -Pmdm.portRevision=${{ inputs.portRevision || '1' }}
           cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
             "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-x86_64.apk"
 

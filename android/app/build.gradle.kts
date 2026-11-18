@@ -23,7 +23,7 @@ val versionMatch: MatchResult = Regex("""(?m)^version = "(\d+)\.(\d+)\.(\d+)(?:-
     .find(repo.resolve("Cargo.toml").readText())
     ?: error("no version in ${repo.resolve("Cargo.toml")} (x.y.z or x.y.z-rc.n)")
 val mdmVersion: String = versionMatch.value.substringAfter('"').removeSuffix("\"")
-val portRevision: Int = ((findProperty("mdm.portRevision") as String?)?.toInt() ?: 0).also {
+val portRevision: Int = (((findProperty("mdm.portRevision") as String?) ?: "").takeIf { it.isNotBlank() }?.toInt() ?: 0).also {
     require(it in 0..26) { "mdm.portRevision: 0 (none) or 1…26 (a…z)" }
 }
 val versionParts: List<Int> = versionMatch.groupValues.drop(1).take(3).map { it.toInt() }
