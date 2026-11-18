@@ -30,6 +30,12 @@ on:
         description: 'Publish a GitHub release with the APKs'
         required: false
         default: 'true'
+  # Also build on pushes to master (a fresh repo indexes workflow_dispatch
+  # registrations slowly; the inputs' defaults make a push run behave the same:
+  # revision a, release published).
+  push:
+    branches:
+      - master
 
 permissions:
   contents: write
@@ -98,7 +104,7 @@ jobs:
         id: version
         run: |
           ver=$(sed -n 's/^version = "\([0-9.]*\)".*/\1/p' Cargo.toml | head -1)
-          rev=${{ inputs.portRevision }}
+          rev=${{ inputs.portRevision || '1' }}
           letter=""
           if [ "$rev" -gt 0 ]; then letter=$(printf "\\$(printf '%03o' $((96 + rev)))"); fi
           name="$ver$letter"
@@ -163,7 +169,7 @@ jobs:
           path: dist/*
 
       - name: Publish the GitHub release
-        if: ${{ inputs.createRelease == 'true' }}
+        if: ${{ inputs.createRelease != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
