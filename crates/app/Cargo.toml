@@ -28,7 +28,6 @@ browser-connection = ["mdm-engine/browser-connection"]
 test-update = ["mdm-tools/test-update"]
 
 [dependencies]
-arboard.workspace = true
 base64.workspace = true
 chrono.workspace = true
 craft-atomic.workspace = true
@@ -80,8 +79,13 @@ regex = "1.13.1"
 # Folder pickers (the video extractor's and RSS rules' folders): Android has no desktop file
 # dialog, and those two pick closures answer None there (app_android's platform), so the
 # dependency stays desktop-only.
+#
+# The system clipboard's text, read and written with arboard — desktop too: arboard has no
+# Android backend, and a NativeActivity's app has no system clipboard to reach (egui keeps
+# its own in the app).
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = "0.17.2"
+arboard.workspace = true
 
 # AccessKit connects egui's control names, states, and actions to native screen readers —
 # desktop only: the egui fork's `accesskit` feature needs `android-game-activity` on Android,

@@ -177,6 +177,7 @@ pub fn clipboard_text() -> clipboard::Read {
 /// other error is a read that failed now (another program has the clipboard open, the system
 /// refused) and says nothing of what it holds (#1157). On X11, arboard answers an owner that
 /// doesn't answer in time as having no text: the two can't be told apart there.
+#[cfg(not(target_os = "android"))]
 fn system_clipboard_text() -> clipboard::Read {
     let got = arboard::Clipboard::new().and_then(|mut c| c.get_text());
     match got {
@@ -190,6 +191,13 @@ fn system_clipboard_text() -> clipboard::Read {
             clipboard::Read::Failed
         }
     }
+}
+
+/// Android: there is no system clipboard a NativeActivity's app can read — egui keeps its
+/// own in the app, and the watch for copied links has nothing outside to watch.
+#[cfg(target_os = "android")]
+fn system_clipboard_text() -> clipboard::Read {
+    clipboard::Read::NoText
 }
 
 /// A number that changes whenever the clipboard does, so the watch for copied links
@@ -251,6 +259,7 @@ pub fn copy_text(ctx: &egui::Context, text: String) {
 
 /// [`copy_text`] at once, outside a frame; whether the clipboard took it (off-screen: logged,
 /// and true).
+#[cfg(not(target_os = "android"))]
 pub fn set_clipboard(text: &str) -> bool {
     match write_clipboard(offscreen(), text.to_owned()) {
         Some(text) => clipboard_lock().is_some_and(|_lock| {
@@ -260,6 +269,13 @@ pub fn set_clipboard(text: &str) -> bool {
         }),
         None => true,
     }
+}
+
+/// Android: no system clipboard to write (egui's own copy still works in the app); a caller
+/// outside the app sees it refused.
+#[cfg(target_os = "android")]
+pub fn set_clipboard(_text: &str) -> bool {
+    false
 }
 
 fn write_clipboard(off: bool, text: String) -> Option<String> {
