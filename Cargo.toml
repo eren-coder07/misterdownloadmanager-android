@@ -35,7 +35,7 @@ craft-i18n = { git = "https://github.com/storytold/craft-libs", rev = "1a11a4897
 # UI: egui 0.37 on storytold's egui/winit forks, the same commits craft-libs uses (see [patch]).
 # "clipboard": text boxes cut, copy and paste with the system clipboard (without it egui keeps
 # a clipboard of its own, and Ctrl+V / Cmd+V never sees what other programs copied).
-eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts", "accesskit", "clipboard"] }
+eframe = { version = "0.37.0", default-features = false, features = ["glow", "default_fonts", "clipboard"] }
 egui = "0.37.0"
 # The lock that keeps MDM's own clipboard reads and writes apart from egui's (main.rs, #629).
 egui-winit = { version = "0.37.0", default-features = false }

@@ -83,6 +83,11 @@ regex = "1.13.1"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = "0.17.2"
 
+# AccessKit connects egui's control names, states, and actions to native screen readers —
+# desktop only: the egui fork's `accesskit` feature needs `android-game-activity` on Android,
+# where a NativeActivity's app has no screen-reader bridge anyway.
+eframe = { workspace = true, features = ["accesskit"] }
+
 # The Android glue (`app_android`): the `AndroidApp` NativeActivity handle the port's cdylib
 # passes over. Resolves to storytold's winit fork through [patch.crates-io].
 [target.'cfg(target_os = "android")'.dependencies]
