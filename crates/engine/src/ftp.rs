@@ -483,10 +483,21 @@ pub(crate) fn client_config(extra: &[Vec<u8>]) -> Result<rustls::ClientConfig, r
     let verifier = if extra.is_empty() {
         Verifier::new(provider.clone())
     } else {
-        Verifier::new_with_extra_roots(
-            extra.iter().map(|c| CertificateDer::from(c.clone())),
-            provider.clone(),
-        )
+        // The Android verifier has no extra-roots variant (it trusts the system's own
+        // trust store alone): the extra roots are skipped there — a server whose chain
+        // needs them fails here, and FTP stays plain FTP, as on a system without any
+        // system certificates (#264).
+        #[cfg(not(target_os = "android"))]
+        {
+            Verifier::new_with_extra_roots(
+                extra.iter().map(|c| CertificateDer::from(c.clone())),
+                provider.clone(),
+            )
+        }
+        #[cfg(target_os = "android")]
+        {
+            Verifier::new(provider.clone())
+        }
     }?;
     Ok(rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()?
