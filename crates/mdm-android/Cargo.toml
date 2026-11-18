@@ -1,0 +1,29 @@
+[package]
+name = "mdm-android"
+description = "Mister Download Manager on Android: a NativeActivity around libmdm_android.so, built by cargo-ndk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The app itself, without `browser-connection` (BoringSSL's C sources — the
+# workspace builds without it, as upstream's own cross-compile check does).
+mdm-app = { path = "../app", default-features = false }
+# Same eframe as the desktop, plus the android-activity `native-activity`
+# backend through egui-winit, so `android_main` can hand the app over. The
+# workspace's [patch.crates-io] resolves it to the storytold/anefzaoui forks.
+eframe = { workspace = true, features = ["android-native-activity"] }
+# For the `AndroidApp` glue type eframe's `NativeOptions::android_app` takes.
+winit = "0.30"
+android_logger = "0.14"
+log = "0.4"
+# End the process without running exit-time destructors while the system's own
+# threads still use what they free (the next launch must be a fresh process:
+# winit's event loop cannot restart in the same one).
+libc = "0.2"

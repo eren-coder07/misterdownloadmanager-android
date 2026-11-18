@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- eframe's glow renderer draws through OpenGL ES 2 (every Android 8.0+
+         device has it; most have newer). -->
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+
+    <!-- Downloads: HTTP(S), torrents and the debrid providers' APIs. Nothing
+         else — the app keeps its files in its own storage. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- The app is Rust, loaded by NativeActivity (android:hasCode="false"). -->
+    <application
+        android:hasCode="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="MDM"
+        android:extractNativeLibs="false"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+
+        <!-- The configuration changes the app handles itself (by resizing), so
+             rotating the device or showing the keyboard doesn't restart the
+             activity. -->
+        <activity
+            android:name="android.app.NativeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:exported="true"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="mdm_android" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

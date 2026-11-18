@@ -628,6 +628,13 @@ impl RssWindow {
         {
             let from = rule.folder.clone();
             winui::start_pick(ui.ctx(), "rss-folder", move || {
+                #[cfg(target_os = "android")]
+                {
+                    // No desktop file dialog here: keep the folder as it was.
+                    let _ = from;
+                    None
+                }
+                #[cfg(not(target_os = "android"))]
                 rfd::FileDialog::new().set_directory(from).pick_folder()
             });
         }

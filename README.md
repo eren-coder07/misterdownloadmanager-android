@@ -539,3 +539,12 @@ Built on [egui](https://github.com/emilk/egui) through
 [rough.js](https://roughjs.com/) (MIT) in [Patrick Hand](https://fonts.google.com/specimen/Patrick+Hand)
 (SIL OFL) and [Vega-Lite](https://vega.github.io/vega-lite/) (BSD-3). Bundled icons and artwork
 keep their own licences, listed in [ATTRIBUTION.md](ATTRIBUTION.md).
+
+
+## Android
+
+A standalone Android port lives in this repository too: a `NativeActivity` around the same
+egui app (universal 32-bit + 64-bit APKs, per-ABI builds, CI release workflow). Upstream had no
+Android support; the port wraps the desktop app without changing it — see
+[android/README.md](android/README.md) for the build and the details, and the repo Releases for
+the APKs.

@@ -8,6 +8,9 @@ license.workspace = true
 authors.workspace = true
 publish.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "misterdownloadmanager"
 path = "src/main.rs"
@@ -55,7 +58,6 @@ toml.workspace = true
 tokio.workspace = true
 url.workspace = true
 percent-encoding.workspace = true
-rfd = "0.17.2"
 # Options → Remote → Pair a device's QR code of the address (#141; Nayuki's, no dependencies).
 qrcodegen = "1.8.0"
 # Line breaks between characters keep a letter and its marks together (Thai, Khmer, Indic).
@@ -74,6 +76,17 @@ brotli-decompressor = "6.2.0"
 # in the tree (resvg's SVG, the engine's dependencies).
 roxmltree = "0.20.0"
 regex = "1.13.1"
+
+# Folder pickers (the video extractor's and RSS rules' folders): Android has no desktop file
+# dialog, and those two pick closures answer None there (app_android's platform), so the
+# dependency stays desktop-only.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd = "0.17.2"
+
+# The Android glue (`app_android`): the `AndroidApp` NativeActivity handle the port's cdylib
+# passes over. Resolves to storytold's winit fork through [patch.crates-io].
+[target.'cfg(target_os = "android")'.dependencies]
+winit = "0.30"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

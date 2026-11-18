@@ -1,0 +1,172 @@
+# Mister Download Manager for Android — universal (32-bit + 64-bit) release build.
+#
+# Builds on GitHub's runners: the Gradle project in android/ drives cargo-ndk,
+# which builds libmdm_android.so for each requested ABI (armv7-linux-androideabi
+# for armeabi-v7a — 32-bit phones — plus aarch64-linux-android for arm64-v8a and
+# x86_64-linux-android for emulators), then packages one APK per choice and a
+# universal APK carrying both ARM ABIs.
+#
+#   Dispatch with portRevision = 1 → version 0.5.2a (MDM 0.5.2, port revision
+#   a), tag v0.5.2a-android, and four APKs:
+#     MDM-0.5.2a-android-universal-arm32-arm64.apk  (every real device)
+#     MDM-0.5.2a-android-arm64.apk                  (phones, tablets)
+#     MDM-0.5.2a-android-arm32.apk                  (old 32-bit phones)
+#     MDM-0.5.2a-android-x86_64.apk                 (emulators)
+#
+# Release signing: ANDROID_KEYSTORE_B64 (a base64 keystore) plus the three
+# MDM_RELEASE_* passwords as repo secrets; without them the build falls back
+# to the debug key.
+
+name: android-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      portRevision:
+        description: 'Port revision: 0 (none) or 1..26 (becomes a..z after the version)'
+        required: false
+        default: '1'
+      createRelease:
+        description: 'Publish a GitHub release with the APKs'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (drop preinstalled SDK/NDK parts we replace, dotnet, ghc)
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf "$ANDROID_HOME/ndk"/* || true
+          df -h /
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK (NDK 29.0.14206865, platform 36, build-tools 36)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: 'true'
+          workspaces: |
+            .
+            crates/app
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Decode the release keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            KEYSTORE="$RUNNER_TEMP/mdm-release.jks"
+            printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$KEYSTORE"
+            {
+              echo "MDM_RELEASE_KEYSTORE=$KEYSTORE"
+              echo "MDM_RELEASE_STORE_PASSWORD=${{ secrets.MDM_RELEASE_STORE_PASSWORD }}"
+              echo "MDM_RELEASE_KEY_ALIAS=${{ secrets.MDM_RELEASE_KEY_ALIAS }}"
+              echo "MDM_RELEASE_KEY_PASSWORD=${{ secrets.MDM_RELEASE_KEY_PASSWORD }}"
+            } >> "$GITHUB_ENV"
+            echo "release signing: MDM_RELEASE_KEYSTORE"
+          else
+            echo "release signing: debug key (no ANDROID_KEYSTORE_B64 secret)"
+          fi
+
+      - name: Version and tag
+        id: version
+        run: |
+          ver=$(sed -n 's/^version = "\([0-9.]*\)".*/\1/p' Cargo.toml | head -1)
+          rev=${{ inputs.portRevision }}
+          letter=""
+          if [ "$rev" -gt 0 ]; then letter=$(printf "\\$(printf '%03o' $((96 + rev)))"); fi
+          name="$ver$letter"
+          tag="v$name-android"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "MDM $name, tag $tag"
+
+      - name: Build the universal APK (arm64-v8a + armeabi-v7a)
+        run: |
+          cd android
+          ./gradlew -q assembleRelease -Pmdm.abis=arm64-v8a,armeabi-v7a -Pmdm.portRevision=${{ inputs.portRevision }}
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
+            "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-universal-arm32-arm64.apk"
+
+      - name: Build the arm64 APK (phones, tablets)
+        run: |
+          cd android
+          ./gradlew -q assembleRelease -Pmdm.abis=arm64-v8a -Pmdm.portRevision=${{ inputs.portRevision }}
+          cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
+            "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-arm64.apk"
+
+      - name: Build the 32-bit APK (armeabi-v7a)
+        run: |
+          cd android
+          ./gradlew -q assembleRelease -Pmdm.abis=armeabi-v7a -Pmdm.portRevision=${{ inputs.portRevision }}
+          cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
+            "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-arm32.apk"
+
+      - name: Build the x86_64 APK (emulators)
+        run: |
+          cd android
+          ./gradlew -q assembleRelease -Pmdm.abis=x86_64 -Pmdm.portRevision=${{ inputs.portRevision }}
+          cp app/build/outputs/apk/release/MDM-${{ steps.version.outputs.name }}-release.apk \
+            "$GITHUB_WORKSPACE/dist/MDM-${{ steps.version.outputs.name }}-android-x86_64.apk"
+
+      - name: Checksums
+        run: (cd dist && sha256sum * > SHA256SUMS.txt) && ls -la dist/
+
+      - name: Release notes
+        run: |
+          name="${{ steps.version.outputs.name }}"
+          tag="${{ steps.version.outputs.tag }}"
+          cat > dist/notes.md <<EOF
+          Mister Download Manager $name for Android — **the first Android build of MDM, with 32-bit support built in**.
+
+          Built from [anefzaoui/misterdownloadmanager](https://github.com/anefzaoui/misterdownloadmanager) (MDM 0.5.2) in this standalone port repository — the upstream desktop app untouched, with an Android port on top (how it works: [android/README.md](https://github.com/eren-coder07/misterdownloadmanager-android/blob/master/android/README.md)). Upstream had no Android support.
+
+          **Install:** on an Android 8.0+ phone or tablet, download \`MDM-$name-android-universal-arm32-arm64.apk\` — it carries both ARM libraries, so it installs on every real device, 32-bit or 64-bit. Per-ABI APKs are there too (\`-arm64\`, \`-arm32\`, \`-x86_64\`) if you want a smaller download. Open the file, allowing installs from that source, or \`adb install -r\` it. Signed with a release key.
+
+          **Works:** the download manager — add URLs, batches, queues, scheduler, categories, RSS rules, checksums, the torrent engine (librqbit), debrid provider accounts and settings; the remote control (#141) — pair the phone the app runs on with a desktop MDM over the local network, or pair a second device with this one. Downloads land in the app's own storage (visible to file managers under Android/data), and the app keeps everything offline-local otherwise.
+
+          **Not yet:** the browser extension / browser-like connection (BoringSSL, upstream's own cross-compile check skips it) — links reach MDM by pasting or the remote control instead; tray and single-instance hand-over (desktop ideas); the desktop file pickers for the video extractor and RSS folders (Android's storage has no folder picker in a NativeActivity).
+
+          MDM is GPL-3.0-or-later; this port's source is at [eren-coder07/misterdownloadmanager-android](https://github.com/eren-coder07/misterdownloadmanager-android). SHA-256 checksums are in \`SHA256SUMS.txt\`.
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: dist/*
+
+      - name: Publish the GitHub release
+        if: ${{ inputs.createRelease == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" dist/* \
+            --title "Mister Download Manager ${{ steps.version.outputs.name }} for Android — universal, 32-bit + 64-bit" \
+            --notes-file dist/notes.md --latest
