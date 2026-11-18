@@ -14,11 +14,17 @@ mod android {
         // The app's own, writable folder: MDM's data dir (mdm_ipc::data_dir
         // honors MDM_DATA_DIR) and every HOME/XDG path other components follow.
         if let Some(dir) = app.internal_data_path() {
-            std::env::set_var("MDM_DATA_DIR", &dir);
-            std::env::set_var("HOME", &dir);
-            std::env::set_var("XDG_DATA_HOME", dir.join("data"));
-            std::env::set_var("XDG_CONFIG_HOME", dir.join("config"));
-            std::env::set_var("XDG_CACHE_HOME", dir.join("cache"));
+            // SAFETY: `set_var` is unsafe in edition 2024 because other threads
+            // may read the environment while it changes — this runs on the
+            // activity's own thread before anything else of the app's starts,
+            // and nothing reads these variables until `app_android` runs.
+            unsafe {
+                std::env::set_var("MDM_DATA_DIR", &dir);
+                std::env::set_var("HOME", &dir);
+                std::env::set_var("XDG_DATA_HOME", dir.join("data"));
+                std::env::set_var("XDG_CONFIG_HOME", dir.join("config"));
+                std::env::set_var("XDG_CACHE_HOME", dir.join("cache"));
+            }
         }
         // Logs reach logcat under the tag "MDM" (adb logcat -s MDM).
         android_logger::init_once(
