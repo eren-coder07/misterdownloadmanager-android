@@ -4,12 +4,27 @@
 //! contents are ours ([unknown] IDM's exact items, lab). Windows, macOS (menu bar) and Linux
 //! (StatusNotifierItem over D-Bus: KDE, GNOME with its AppIndicator extension).
 
-use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
+// Android: a NativeActivity's app has no notification area, so the whole tray surface is
+// inert. `available()` is false (the window never hides into a tray), `Tray::new` never
+// makes anything, and `poll` stays empty. The types keep the desktop's shapes, so the app
+// compiles unchanged; the real tray is the `desktop` module below.
+#[cfg(target_os = "android")]
+mod stub;
 
-mod beside;
-mod picture;
-mod watch;
+#[cfg(target_os = "android")]
+pub use stub::*;
+
+#[cfg(not(target_os = "android"))]
+mod desktop {
+    use std::sync::mpsc::{Receiver, Sender, channel};
+    use std::sync::{Arc, Mutex};
+
+    #[path = "beside.rs"]
+    mod beside;
+    #[path = "picture.rs"]
+    mod picture;
+    #[path = "watch.rs"]
+    mod watch;
 
 #[cfg(windows)]
 pub(crate) use picture::small_icon_px;
@@ -916,3 +931,8 @@ mod tests {
         );
     }
 }
+
+
+}
+#[cfg(not(target_os = "android"))]
+pub use desktop::*;

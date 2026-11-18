@@ -103,8 +103,9 @@ raw-window-handle = "0.6"
 # (win32.rs `graphics_drivers`, #1205; wgpu-hal builds it too).
 windows = { version = "0.62", default-features = false, features = ["Win32_Graphics_DirectWrite", "Win32_Graphics_Dxgi"] }
 
-# The notification-area icon and its menu (tray.rs).
-[target.'cfg(not(target_os = "linux"))'.dependencies]
+# The notification-area icon and its menu (tray.rs). Android has no notification area for a
+# NativeActivity's app: tray.rs compiles its inert stub there instead.
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 tray-icon = "0.26.1"
 # Windows and macOS: the system's font for a script MDM's font lists don't name (theme.rs,
 # #1125). Linux asks fontconfig for any script already (`fc-match :charset=`).
