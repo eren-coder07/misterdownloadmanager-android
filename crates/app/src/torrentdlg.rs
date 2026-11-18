@@ -661,6 +661,13 @@ impl TorrentDialog {
         {
             let from = self.folder.clone();
             winui::start_pick(ui.ctx(), "torrent-folder", move || {
+                #[cfg(target_os = "android")]
+                {
+                    // No desktop file dialog here: the folder stays as it was.
+                    let _ = &from;
+                    None
+                }
+                #[cfg(not(target_os = "android"))]
                 rfd::FileDialog::new().set_directory(from).pick_folder()
             });
         }

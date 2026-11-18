@@ -5228,13 +5228,55 @@ pub fn pass_focus_on(ui: &Ui, resp: &Response, enabled: bool) {
 
 /// A system file or folder dialog titled `title`, for [`start_pick`]: the system draws the title,
 /// so it goes without isolates (#919).
+#[cfg(not(target_os = "android"))]
 pub fn file_dialog(title: &str) -> rfd::FileDialog {
     rfd::FileDialog::new().set_title(crate::i18n::os_text(title))
+}
+
+/// Android: no desktop file dialog. The stub chains like rfd's builder and its picks answer
+/// [`None`], so [`start_pick`]/[`picked`]'s flow stays as-is: the folder or file simply never
+/// changes.
+#[cfg(target_os = "android")]
+pub fn file_dialog(_title: &str) -> Dialog {
+    Dialog
+}
+
+/// The dialog stand-in for Android.
+#[cfg(target_os = "android")]
+#[derive(Clone, Copy)]
+pub struct Dialog;
+
+#[cfg(target_os = "android")]
+impl Dialog {
+    pub fn set_directory(self, _dir: impl AsRef<std::path::Path>) -> Self {
+        self
+    }
+
+    pub fn set_file_name(self, _name: impl Into<String>) -> Self {
+        self
+    }
+
+    pub fn add_filter(self, _name: impl Into<String>, _extensions: &[impl ToString]) -> Self {
+        self
+    }
+
+    pub fn pick_file(self) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    pub fn pick_folder(self) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    pub fn save_file(self) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 /// The system Save dialog for a download's file (Download File Info's Save As, #1088): `name`
 /// filled in, in `dir` when it is there, and the download's own file type. Built on
 /// [`start_pick`]'s thread (it looks at the disk); its answer goes through [`saved_name`].
+#[cfg(not(target_os = "android"))]
 pub fn save_dialog(title: &str, dir: &std::path::Path, name: &str) -> rfd::FileDialog {
     let mut dialog = file_dialog(title).set_file_name(name);
     if dir.is_dir() {
@@ -5256,6 +5298,12 @@ pub fn save_dialog(title: &str, dir: &std::path::Path, name: &str) -> rfd::FileD
         dialog = dialog.add_filter(crate::i18n::t("All files"), &["*"]);
     }
     dialog
+}
+
+/// Android: no desktop Save dialog (see [`file_dialog`]).
+#[cfg(target_os = "android")]
+pub fn save_dialog(_title: &str, _dir: &std::path::Path, _name: &str) -> Dialog {
+    Dialog
 }
 
 /// The file [`save_dialog`] answered for a download named `was`: the name typed there made a
@@ -5452,6 +5500,12 @@ pub fn folder_box(
     if button_light(ui, dots, "...", ButtonKind::Normal, false).clicked() {
         let from = value.trim().to_owned();
         start_pick(ui.ctx(), key, move || {
+            #[cfg(target_os = "android")]
+            {
+                let _ = &from;
+                None
+            }
+            #[cfg(not(target_os = "android"))]
             rfd::FileDialog::new().set_directory(from).pick_folder()
         });
     }

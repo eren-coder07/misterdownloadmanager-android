@@ -4993,6 +4993,11 @@ pub fn wake_support() -> crate::wake::Support {
     {
         crate::wake::Support::MacAdmin
     }
+    // Android: no RTC wake alarm to ask for.
+    #[cfg(target_os = "android")]
+    {
+        crate::wake::Support::NoAlarm
+    }
 }
 
 /// Seconds to add to a system time to have the clock chip's: the chip may keep local time
@@ -5158,4 +5163,59 @@ pub fn keep_awake(reason: Option<&str>) -> bool {
         return held.is_some();
     }
     true
+}
+
+// Android: no desktop session to ask — the default browser's agent (defaultbrowser.rs), the
+// shell's file-type icons (fileicons.rs), the wake alarm, the "keep awake" hold and the
+// system keychain (secrets.rs's `os`, unix here) have no counterpart on this platform, and
+// their calls compile against these answers.
+#[cfg(target_os = "android")]
+pub fn default_browser() -> Option<mdm_engine::agent::Found> {
+    None
+}
+
+#[cfg(target_os = "android")]
+pub fn file_icon(_what: &crate::fileicons::What, _px: u32) -> Option<crate::fileicons::Native> {
+    None
+}
+
+#[cfg(target_os = "android")]
+pub fn wake_at(_at: Option<i64>) -> Result<(), String> {
+    Err("there is no wake alarm on Android".to_owned())
+}
+
+#[cfg(target_os = "android")]
+pub fn keep_awake(_reason: Option<&str>) -> bool {
+    // Nothing to keep awake on a phone's screen; the caller's fallback holds.
+    false
+}
+
+#[cfg(target_os = "android")]
+pub fn keychain_probe(_service: &str) -> Result<(), crate::secrets::Fault> {
+    Err(crate::secrets::Fault::Missing)
+}
+
+#[cfg(target_os = "android")]
+pub fn keychain_read(_service: &str, _account: &str) -> Result<Option<String>, crate::secrets::Fault> {
+    Err(crate::secrets::Fault::Missing)
+}
+
+#[cfg(target_os = "android")]
+pub fn keychain_write(
+    _service: &str,
+    _account: &str,
+    _label: &str,
+    _secret: &str,
+) -> Result<(), crate::secrets::Fault> {
+    Err(crate::secrets::Fault::Missing)
+}
+
+#[cfg(target_os = "android")]
+pub fn keychain_delete(_service: &str, _account: &str) -> Result<(), crate::secrets::Fault> {
+    Err(crate::secrets::Fault::Missing)
+}
+
+#[cfg(target_os = "android")]
+pub fn keychain_list(_service: &str) -> Result<Vec<String>, crate::secrets::Fault> {
+    Err(crate::secrets::Fault::Missing)
 }
