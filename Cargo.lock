@@ -4612,6 +4612,7 @@ version = "0.5.2"
 dependencies = [
  "android_logger",
  "eframe",
+ "jni",
  "libc",
  "log",
  "mdm-app",
@@ -4638,6 +4639,7 @@ dependencies = [
  "egui_system_font_provider",
  "image",
  "libc",
+ "log",
  "mdm-cli",
  "mdm-cnl",
  "mdm-crash",

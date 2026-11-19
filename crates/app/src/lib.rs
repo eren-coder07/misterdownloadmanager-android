@@ -31,7 +31,7 @@ mod freshlink;
 mod gallerydlg;
 mod grabber;
 mod headless;
-mod help;
+pub mod help;
 mod helpers;
 mod hotkey;
 mod i18n;
@@ -999,6 +999,14 @@ mod tests {
 pub fn app_android(
     app: winit::platform::android::activity::AndroidApp,
 ) -> eframe::Result {
+    // The stages of a start, into logcat and the launcher's mdm-debug.log, so
+    // a launch that never opens says how far it came (log.rs's own file log
+    // lives in the app's private storage, out of reach without a computer).
+    fn stage(name: &str) {
+        log::info!("start: {name}");
+    }
+    stage("app entry");
+
     // A windowed app has no console: record panics in the data dir's crash.log.
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -1014,6 +1022,7 @@ pub fn app_android(
     clock::start();
     // Fonts looked up while the rest starts; only the paying launch needs them.
     theme::prepare_fonts();
+    stage("clock and fonts");
 
     // The command channel opens before the window: what the remote control
     // sends is handled at the first frame.
@@ -1029,12 +1038,14 @@ pub fn app_android(
     });
     let sink = mdm_ipc::Sink::new(tx.clone(), wake.clone());
     let _ = mdm_ipc::serve(tx, move || wake());
+    stage("control channel up");
 
     // Downloads run on a Tokio runtime; the UI thread only reads snapshots.
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     let handle = rt.handle().clone();
     // The list and settings, read before the window opens.
     let loaded = store::load();
+    stage(&format!("store loaded ({}, {} items)", loaded.items.len(), loaded.queues.len()));
     let z = scale::startup(loaded.settings.interface_size);
     theme::init_smooth_text(loaded.settings.smooth_text);
     // The log (release builds too) and the crash monitor.
@@ -1062,16 +1073,22 @@ pub fn app_android(
     // keychain now; on Android there is none, and the sealed copies stay in the
     // data dir, as a system without a keyring keeps them (secrets.rs, #44).
     let _ = loaded.settings.for_disk();
+    stage("secrets settled");
     // No tray-start modes on Android: the window always shows.
     let start = Start::Shown;
     renderer::started_with_session(false);
     let plan = renderer::plan(loaded.settings.renderer, None, renderer::Known::read());
+    stage(&format!(
+        "graphics plan: {}",
+        plan.attempts.iter().map(|a| a.name()).collect::<Vec<_>>().join(", ")
+    ));
     let options = || eframe::NativeOptions {
         // Required on Android: the NativeActivity eframe's event loop runs on.
         android_app: Some(app.clone()),
         ..Default::default()
     };
     let result = renderer::run(APP_ID, &plan, options, move |cc| {
+        stage("window up; building the app");
         scale::start(&cc.egui_ctx, z);
         let _ = window.set(cc.egui_ctx.clone());
         clipboard::wake(&cc.egui_ctx);
@@ -1086,6 +1103,7 @@ pub fn app_android(
         )));
         Shared(app)
     });
+    stage(&format!("window loop over ({result:?})"));
     crash::clean_exit();
     result
 }

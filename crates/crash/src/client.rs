@@ -83,29 +83,42 @@ impl Reporter {
     /// window thread tries for a moment, then a thread of its own takes the try over. None when
     /// it can't start: MDM runs on without crash reports.
     pub fn start(exe: &Path, data: &Path) -> Option<Arc<Reporter>> {
-        let socket = crate::monitor::socket_path(std::process::id());
-        let mut cmd = Command::new(exe);
-        cmd.arg(crate::MONITOR_ARG)
-            .arg(&socket)
-            .arg("--data")
-            .arg(data)
-            .arg("--parent")
-            .arg(std::process::id().to_string());
-        let child = match cmd.spawn() {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::warn!("crash monitor didn't start: {e}");
-                return None;
-            }
-        };
-        let reporter = Arc::new(Reporter {
-            client: OnceLock::new(),
-            monitor: Mutex::new(Some(child)),
-            kept: Mutex::new(Kept::default()),
-            off: AtomicBool::new(false),
-        });
-        Self::connect(&reporter, socket);
-        Some(reporter)
+        #[cfg(target_os = "android")]
+        {
+            // A NativeActivity app has no second executable: `current_exe` is the system's own
+            // `app_process` (forking it spawns nothing useful), and the report window is a
+            // desktop window. The port's launcher (mdm-android) writes panics, signals and the
+            // launch log to `mdm-debug.log` and shows a notification instead.
+            let _ = (exe, data);
+            return None;
+        }
+
+        #[cfg(not(target_os = "android"))]
+        {
+            let socket = crate::monitor::socket_path(std::process::id());
+            let mut cmd = Command::new(exe);
+            cmd.arg(crate::MONITOR_ARG)
+                .arg(&socket)
+                .arg("--data")
+                .arg(data)
+                .arg("--parent")
+                .arg(std::process::id().to_string());
+            let child = match cmd.spawn() {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("crash monitor didn't start: {e}");
+                    return None;
+                }
+            };
+            let reporter = Arc::new(Reporter {
+                client: OnceLock::new(),
+                monitor: Mutex::new(Some(child)),
+                kept: Mutex::new(Kept::default()),
+                off: AtomicBool::new(false),
+            });
+            Self::connect(&reporter, socket);
+            Some(reporter)
+        }
     }
 
     /// Connect to the monitor: on the caller's thread for [`FIRST_TRY`], then, if it hasn't

@@ -174,7 +174,10 @@ jobs:
           path: dist/*
 
       - name: Publish the GitHub release
-        if: ${{ inputs.createRelease != 'false' }}
+        # A push to master builds and uploads the artifacts, but publishes no
+        # release: the tag belongs to the dispatch (portRevision) that chose a
+        # version, and a push rebuild would only collide with it.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.createRelease != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
