@@ -168,7 +168,7 @@ jobs:
           MDM is GPL-3.0-or-later; this port's source is at [eren-coder07/misterdownloadmanager-android](https://github.com/eren-coder07/misterdownloadmanager-android). SHA-256 checksums are in \`SHA256SUMS.txt\`.
           EOF
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-apks
           path: dist/*
