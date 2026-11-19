@@ -162,7 +162,8 @@ impl Attempt {
         }
     }
 
-    fn name(self) -> &'static str {
+    /// Its name for the log and the crash reports, as View → Draw with says it.
+    pub fn name(self) -> &'static str {
         match (self, GPU) {
             (Attempt::OpenGl, _) | (_, None) => "OpenGL",
             (Attempt::Gpu(Adapters::Software), Some(Api::Direct3D)) => "Direct3D 12 (WARP)",
