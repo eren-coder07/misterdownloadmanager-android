@@ -74,7 +74,7 @@ log = "0.4"
 brotli-decompressor = "6.2.0"
 # RSS feeds (rss.rs): reading them (no DTDs), and the rules' regular expressions; both already
 # in the tree (resvg's SVG, the engine's dependencies).
-roxmltree = "0.20.0"
+roxmltree = "0.21.2"
 regex = "1.13.1"
 
 # Folder pickers (the video extractor's and RSS rules' folders): Android has no desktop file
