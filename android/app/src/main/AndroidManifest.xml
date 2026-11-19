@@ -9,13 +9,28 @@
          else — the app keeps its files in its own storage. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- The app is Rust, loaded by NativeActivity (android:hasCode="false"). -->
+    <!-- The app is Rust, loaded by NativeActivity; the small Java side is the
+         launcher's gate (MdmGateActivity), which shows a crash report when the
+         last launch ended in one. -->
     <application
-        android:hasCode="false"
+        android:hasCode="true"
         android:icon="@mipmap/ic_launcher"
         android:label="MDM"
         android:extractNativeLibs="false"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+
+        <!-- The launcher: shows the last launch's crash report when there was
+             one (on screen, copied to the clipboard, shareable), and hands
+             every other launch straight to the NativeActivity. -->
+        <activity
+            android:name=".MdmGateActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <!-- The configuration changes the app handles itself (by resizing), so
              rotating the device or showing the keyboard doesn't restart the
@@ -23,16 +38,12 @@
         <activity
             android:name="android.app.NativeActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
-            android:exported="true"
+            android:exported="false"
             android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize">
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="mdm_android" />
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
     </application>
 </manifest>

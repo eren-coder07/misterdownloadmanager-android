@@ -38,12 +38,14 @@ mod android {
     static SIGNAL_FD: AtomicI32 = AtomicI32::new(-1);
 
     /// The mirrored log files, opened once: one beside the app's public folder
-    /// and one in its private one, both appended to.
+    /// and one in its private one. Each launch's log is its own: the files are
+    /// truncated here, so a report's tail (the launcher's gate reads them) is
+    /// the launch that crashed, never one from before.
     fn open_files(app: &AndroidApp) -> Vec<Mutex<File>> {
         let mut files = Vec::new();
         for dir in [app.external_data_path(), app.internal_data_path()] {
             let Some(dir) = dir else { continue };
-            match File::options().append(true).create(true).open(dir.join("mdm-debug.log")) {
+            match File::create(dir.join("mdm-debug.log")) {
                 Ok(f) => files.push(Mutex::new(f)),
                 Err(e) => log::warn!("debug log in {}: {e}", dir.display()),
             }
@@ -112,24 +114,49 @@ mod android {
 
     /// A native crash: one line into the mirrored file, then the system takes
     /// over as with any crashed app. The handler may only call the signal-safe
-    /// few, so no locks and no allocation: one `write` of a ready string.
+    /// few, so no locks, no allocation, no formatting: a ready line written by
+    /// hand into a fixed buffer, the fault address included (where a bad memory
+    /// access points — a null deref says one thing, a wild pointer another).
     #[allow(unsafe_code)]
-    extern "C" fn on_native_signal(sig: libc::c_int) {
+    extern "C" fn on_native_signal(
+        sig: libc::c_int,
+        info: *mut libc::siginfo_t,
+        _context: *mut libc::c_void,
+    ) {
         let fd = SIGNAL_FD.load(Ordering::Relaxed);
         if fd >= 0 {
-            let ms = START.get().map(|s| s.elapsed().as_millis()).unwrap_or(0);
-            let text = format!("[+{ms:08} ms] NATIVE CRASH: {}\n", signal_name(sig));
-            let bytes = text.as_bytes();
+            let mut line = [0u8; 160];
+            let mut n = 0;
+            push_bytes(&mut line, &mut n, b"[+");
+            let ms = START.get().map(|s| s.elapsed().as_millis() as u64).unwrap_or(0);
+            push_num(&mut line, &mut n, ms);
+            push_bytes(&mut line, &mut n, b" ms] NATIVE CRASH: ");
+            push_bytes(&mut line, &mut n, signal_name(sig).as_bytes());
+            // The fault address, where the signal carries one: si_code > 0
+            // means the kernel generated it for that address; a raise or an
+            // abort's si_addr is whoever's, and says nothing.
+            if !info.is_null() {
+                // SAFETY: the kernel hands the siginfo of this very signal.
+                let si = unsafe { &*info };
+                if si.si_code > 0 {
+                    // SAFETY: `si_addr` reads the union for signal codes that
+                    // carry an address (SEGV_MAPERR and friends).
+                    let addr = unsafe { si.si_addr() } as usize;
+                    push_bytes(&mut line, &mut n, b" at ");
+                    push_hex(&mut line, &mut n, addr as u64);
+                }
+            }
+            push_bytes(&mut line, &mut n, b"\n");
             // SAFETY: `write` takes a valid fd and a valid buffer; the handler
             // runs on the thread the signal hit, with nothing else owning fd.
             unsafe {
-                let mut left = bytes;
+                let mut left = &line[..n];
                 while !left.is_empty() {
-                    let n = libc::write(fd, left.as_ptr().cast(), left.len());
-                    if n <= 0 {
+                    let wrote = libc::write(fd, left.as_ptr().cast(), left.len());
+                    if wrote <= 0 {
                         break;
                     }
-                    left = &left[n as usize..];
+                    left = &left[wrote as usize..];
                 }
             }
         }
@@ -142,6 +169,49 @@ mod android {
         }
     }
 
+    /// Bytes into a fixed buffer, at most what is left in it.
+    fn push_bytes(buf: &mut [u8], at: &mut usize, bytes: &[u8]) {
+        let room = buf.len().saturating_sub(*at);
+        let n = bytes.len().min(room);
+        buf[*at..*at + n].copy_from_slice(&bytes[..n]);
+        *at += n;
+    }
+
+    /// A decimal number, hand-rolled (the handler may not format).
+    fn push_num(buf: &mut [u8], at: &mut usize, mut v: u64) {
+        let mut tmp = [0u8; 20];
+        let mut i = tmp.len();
+        if v == 0 {
+            i -= 1;
+            tmp[i] = b'0';
+        } else {
+            while v > 0 {
+                i -= 1;
+                tmp[i] = b'0' + (v % 10) as u8;
+                v /= 10;
+            }
+        }
+        push_bytes(buf, at, &tmp[i..]);
+    }
+
+    /// A hexadecimal number, hand-rolled, no `0x` (the caller writes it).
+    fn push_hex(buf: &mut [u8], at: &mut usize, mut v: u64) {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut tmp = [0u8; 16];
+        let mut i = tmp.len();
+        if v == 0 {
+            i -= 1;
+            tmp[i] = b'0';
+        } else {
+            while v > 0 {
+                i -= 1;
+                tmp[i] = HEX[(v & 0xf) as usize];
+                v >>= 4;
+            }
+        }
+        push_bytes(buf, at, &tmp[i..]);
+    }
+
     /// The signals worth a line in the file, handled.
     #[allow(unsafe_code)]
     fn install_signal_handlers() {
@@ -151,7 +221,7 @@ mod android {
         unsafe {
             let mut action: libc::sigaction = std::mem::zeroed();
             action.sa_sigaction = on_native_signal as *const () as usize;
-            action.sa_flags = libc::SA_RESTART;
+            action.sa_flags = libc::SA_SIGINFO | libc::SA_RESTART;
             libc::sigemptyset(&mut action.sa_mask);
             for sig in [libc::SIGSEGV, libc::SIGBUS, libc::SIGILL, libc::SIGFPE, libc::SIGABRT, libc::SIGTRAP] {
                 libc::sigaction(sig, &action, std::ptr::null_mut());
@@ -276,11 +346,23 @@ mod android {
         })
     }
 
+    /// The run-state marker the launcher's gate reads on the next launch:
+    /// "starting" while the app runs, "exited" or "error" once it ends by
+    /// itself. A crash leaves "starting" behind, and the gate reports it.
+    fn set_run_state(internal: Option<&std::path::Path>, state: &str) {
+        if let Some(dir) = internal {
+            let _ = std::fs::write(dir.join("run-state"), state);
+        }
+    }
+
     pub fn run(app: AndroidApp) {
         START.set(Instant::now()).ok();
+        let internal = app.internal_data_path();
+        set_run_state(internal.as_deref(), "starting");
 
         // Every log line goes to logcat (tag MDM) and to the mirrored files at
-        // once: logcat for a computer, the file for a file manager.
+        // once: logcat for a computer, the file for the launcher's gate and a
+        // file manager. The files truncate here: each launch's log is its own.
         FILES.set(open_files(&app)).ok();
         // The system's version (a getprop read that would panic on a device
         // without it — that device has bigger problems, and the start goes on).
@@ -296,8 +378,8 @@ mod android {
 
         // The app's own, writable folder: MDM's data dir (mdm_ipc::data_dir
         // honors MDM_DATA_DIR) and every HOME/XDG path other components follow.
-        if let Some(dir) = app.internal_data_path() {
-            open_signal_fd(Some(&dir));
+        if let Some(dir) = &internal {
+            open_signal_fd(Some(dir));
             // SAFETY: `set_var` is unsafe in edition 2024 because other threads
             // may read the environment while it changes — this runs on the
             // activity's own thread before anything else of the app's starts,
@@ -344,13 +426,15 @@ mod android {
         let notifier = app.clone();
         let outcome = panic::catch_unwind(AssertUnwindSafe(|| mdm_app::app_android(app)));
         match outcome {
-            Ok(Ok(())) => {}
+            Ok(Ok(())) => set_run_state(internal.as_deref(), "exited"),
             Ok(Err(e)) => {
+                set_run_state(internal.as_deref(), "error");
                 let text = format!("Mister Download Manager could not start: {e:?}");
                 debug_line(&text);
                 notify(&notifier, "MDM could not start", &text);
             }
             Err(payload) => {
+                // The marker stays "starting": the next launch reports the crash.
                 let message = panic_message(payload.as_ref());
                 let text =
                     format!("Mister Download Manager ended unexpectedly while starting: {message}");
